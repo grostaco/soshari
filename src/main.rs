@@ -35,14 +35,10 @@ impl EventHandler for Handler {
 async fn main() {
     let intents = GatewayIntents::empty();
     let handler = Handler {};
-    println!("{:#?}", dotenv!("DISCORD_TOKEN"));
-    let mut client = Client::builder(
-        "MTAzNjc4NTcwMDgxMDUyMjY2NQ.GnNhpQ.BotCUTMhHZHAbOsjgEIkiypMbj1NClJQhs6EG8",
-        intents,
-    )
-    .event_handler(handler)
-    .await
-    .expect("Cannot create client");
+    let mut client = Client::builder(dotenv!("DISCORD_TOKEN"), intents)
+        .event_handler(handler)
+        .await
+        .expect("Cannot create client");
 
     client.start().await.expect("Cannot start client");
 }
