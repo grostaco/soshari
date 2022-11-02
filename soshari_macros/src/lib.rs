@@ -12,7 +12,7 @@ pub fn generate_adjectives(stream: TokenStream) -> TokenStream {
         .into_iter()
         .filter_map(|tree| {
             if let TokenTree::Ident(ident) = tree {
-                Some(ident.to_string())
+                Some(ident.to_string().replace('_', "-"))
             } else {
                 None
             }
@@ -21,7 +21,12 @@ pub fn generate_adjectives(stream: TokenStream) -> TokenStream {
 
     let adjectives_upper_ident = adjectives
         .iter()
-        .map(|adjective| Ident::new(&adjective.to_uppercase(), Span::call_site()))
+        .map(|adjective| {
+            Ident::new(
+                &adjective.replace('-', "_").to_uppercase(),
+                Span::call_site(),
+            )
+        })
         .collect::<Vec<_>>();
 
     let bit_offset = 0..adjectives.len();
