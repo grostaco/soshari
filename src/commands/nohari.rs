@@ -99,7 +99,7 @@ pub async fn run(ctx: Context, command: CommandInteraction) {
                 None
             };
 
-            let selected = menu_get(embed, &ctx, &command, NohariAdjectives::adjectives()).await;
+            let selected = menu_get(embed, &ctx, &command, NohariAdjectives::adjectives(), 3).await;
 
             if let Some(target) = target {
                 target.others.push(Nohari {

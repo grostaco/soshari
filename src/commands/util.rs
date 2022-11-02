@@ -39,6 +39,7 @@ pub async fn menu_get(
     ctx: &Context,
     command: &CommandInteraction,
     adjectives: &[&str],
+    min: usize,
 ) -> Vec<String> {
     let embed = |selected: &Vec<String>| {
         embed.clone().field(
@@ -92,7 +93,7 @@ pub async fn menu_get(
             CreateButton::new("Next", "next").style(ButtonStyle::Primary),
             CreateButton::new("Submit", "submit")
                 .style(ButtonStyle::Success)
-                .disabled(selected.len() < 5),
+                .disabled(selected.len() < min),
         ])
     };
 
