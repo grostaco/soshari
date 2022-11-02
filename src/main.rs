@@ -17,6 +17,7 @@ impl EventHandler for Handler {
         if let Interaction::Command(command) = interaction {
             match command.data.name.as_str() {
                 "johari" => commands::johari::run(ctx, command).await,
+                "nohari" => commands::nohari::run(ctx, command).await,
                 _ => println!(":( Unimplemented"),
             }
         }
@@ -26,6 +27,9 @@ impl EventHandler for Handler {
         println!("{} is connected", ready.user.name);
 
         Command::create_global_application_command(&ctx.http, commands::johari::create())
+            .await
+            .expect("Error while creating new command");
+        Command::create_global_application_command(&ctx.http, commands::nohari::create())
             .await
             .expect("Error while creating new command");
     }

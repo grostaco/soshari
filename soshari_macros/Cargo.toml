@@ -8,9 +8,11 @@ edition = "2021"
 [dependencies]
 proc-macro2 = "1.0.47"
 quote = "1.0.21"
-syn = { version = "1.0.103", features = ["derive"] }
+syn = { version = "1.0.103", features = ["derive", "extra-traits"] }
 trybuild = "1.0.61"
 bitflags = "1.3.2"
 serde = { version = "1.0.147", features = ["derive"] }
+serde_json = "1.0.87"
+
 [lib]
 proc-macro = true

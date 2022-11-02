@@ -1,75 +1,33 @@
 use itertools::Itertools;
-use std::{
-    collections::HashMap,
-    fs::{self, OpenOptions},
-    path::Path,
-    time::Duration,
-};
+use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use serenity::prelude::*;
 use serenity::{
-    builder::{
-        CreateActionRow, CreateButton, CreateCommand, CreateCommandOption, CreateEmbed,
+    builder::{CreateCommand, CreateCommandOption, CreateEmbed,
         CreateEmbedFooter, CreateInteractionResponse, CreateInteractionResponseMessage,
-        CreateSelectMenu, CreateSelectMenuKind, CreateSelectMenuOption,
     },
-    collector::ComponentInteractionCollectorBuilder,
-    futures::StreamExt,
     model::prelude::{
-        command::CommandOptionType, component::ButtonStyle, CommandDataOptionValue,
-        CommandInteraction, ComponentInteractionDataKind, UserId,
+        command::CommandOptionType, CommandDataOptionValue,
+        CommandInteraction
     },
 };
-use soshari_macros::generate_adjectives;
+use soshari_macros::adjectives;
 
-use super::util::respond_embed_error;
+use super::util::{menu_get, respond_embed_error};
 
-generate_adjectives! { accepting, adaptable, bold, brave, calm, caring, cheerful, confident, dependable, dignified, energetic, extroverted,
-friendly, giving, happy, helpful, idealistic, independent, ingenious, intelligent,
-introverted, kind, knowledgeable, logical, loving, mature, modest, nervous, observant,
-organised, patient, proud, quiet, reflective, relaxed, responsive,
- self_assertive, self_conscious, sensible, sentimental, shy, silly, spontaneous,
-sympathetic, tense, trustworthy, warm, witty, wise }
-
+#[adjectives(
+    accepting, adaptable, bold, brave, calm, caring, cheerful, confident, dependable, dignified, 
+    energetic, extroverted, friendly, giving, happy, helpful, idealistic, independent, ingenious, 
+    intelligent, introverted, kind, knowledgeable, logical, loving, mature, modest, nervous, observant, 
+    organised, patient, proud, quiet, reflective, relaxed, responsive, self_assertive, self_conscious, sensible, 
+    sentimental, shy, silly, spontaneous, sympathetic, tense, trustworthy, warm, witty, wise
+)]
 #[derive(Serialize, Deserialize)]
 pub struct Johari {
-    id: UserId,
-    adjectives: Adjectives,
+    id: u64,
+    adjectives: JohariAdjectives,
     others: Vec<Johari>,
-}
-
-pub struct JohariGroup(Vec<Johari>);
-
-impl JohariGroup {
-    fn load<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
-        Ok(JohariGroup(
-            serde_json::from_str(&fs::read_to_string(path)?).unwrap_or(Vec::new()),
-        ))
-    }
-
-    fn dump<P: AsRef<Path>>(&self, path: P) -> std::io::Result<()> {
-        serde_json::to_writer_pretty(
-            OpenOptions::new().write(true).truncate(true).open(path)?,
-            &self.0,
-        )?;
-        Ok(())
-    }
-
-    fn get(&self, id: UserId) -> Option<&Johari> {
-        self.0.iter().find(|johari| johari.id == id)
-    }
-
-    fn get_mut(&mut self, id: UserId) -> Option<&mut Johari> {
-        self.0.iter_mut().find(|johari| johari.id == id)
-    }
-
-    fn push(&mut self, johari: Johari) {
-        match self.get_mut(johari.id) {
-            Some(s) => s.adjectives = johari.adjectives,
-            None => self.0.push(johari),
-        }
-    }
 }
 
 pub fn create() -> CreateCommand {
@@ -103,6 +61,13 @@ pub fn create() -> CreateCommand {
 pub async fn run(ctx: Context, command: CommandInteraction) {
     let mut johari_group = JohariGroup::load("johari.json").unwrap();
     let id = command.user.id;
+    let embed = 
+        CreateEmbed::new()
+            .title("The Johari window test")
+            .description("The Johari Window was invented by Joseph Luft and Harrington Ingham in the 1950s as a model for mapping personality awareness")
+            .color((0xFF, 0x5C, 0x5C))
+            .footer(CreateEmbedFooter::new("This johari window is modified; see the original at https://kevan.org/johari"))
+    ;
 
     match &command.data.options[..] {
         [start] if start.name == "start" => {
@@ -118,7 +83,7 @@ pub async fn run(ctx: Context, command: CommandInteraction) {
                         .await;
                         return;
                     }
-                    if let Some(target) = johari_group.get_mut(target_id) {
+                    if let Some(target) = johari_group.get_mut(target_id.into()) {
                         Some(target)
                     } else {
                         respond_embed_error(
@@ -136,18 +101,18 @@ pub async fn run(ctx: Context, command: CommandInteraction) {
                 None
             };
 
-            let selected = get_johari(&ctx, &command).await;
+            let selected = menu_get(embed, &ctx, &command, JohariAdjectives::adjectives()).await;
 
             if let Some(target) = target {
                 target.others.push(Johari {
-                    id,
-                    adjectives: adjectives_to_bitflags(selected),
+                    id: id.into(),
+                    adjectives: selected.into(),
                     others: Vec::new(),
                 });
             } else {
                 johari_group.push(Johari {
-                    id,
-                    adjectives: adjectives_to_bitflags(selected),
+                    id: id.into(),
+                    adjectives: selected.into(),
                     others: Vec::new(),
                 });
             }
@@ -166,7 +131,7 @@ pub async fn run(ctx: Context, command: CommandInteraction) {
                 .await;
                 return;
             };
-            if let Some(johari) = johari_group.get(target_id) {
+            if let Some(johari) = johari_group.get(target_id.into()) {
                 let guild_id = command.guild_id.unwrap();
                 let color = match guild_id
                     .member(&ctx.http, target_id)
@@ -181,8 +146,10 @@ pub async fn run(ctx: Context, command: CommandInteraction) {
                     None => (0, 0, 0).into(),
                 };
 
-                let mut arena: HashMap<&&str, usize> =
-                    ADJECTIVES.iter().map(|adjective| (adjective, 0)).collect();
+                let mut arena: HashMap<&&str, usize> = JohariAdjectives::adjectives()
+                    .iter()
+                    .map(|adjective| (adjective, 0))
+                    .collect();
                 let mut blind = arena.clone();
                 let mut facade = johari.adjectives;
                 let mut unknown = johari.adjectives.complement();
@@ -191,10 +158,10 @@ pub async fn run(ctx: Context, command: CommandInteraction) {
                     let arena_bitflags = johari.adjectives & other.adjectives;
                     let blind_bitflags = !johari.adjectives & other.adjectives;
 
-                    for adjective in bitflags_to_adjectives(arena_bitflags) {
+                    for adjective in arena_bitflags.as_adjectives() {
                         *arena.get_mut(&adjective).unwrap() += 1;
                     }
-                    for adjective in bitflags_to_adjectives(blind_bitflags) {
+                    for adjective in blind_bitflags.as_adjectives() {
                         *blind.get_mut(&adjective).unwrap() += 1;
                     }
                     facade &= !(arena_bitflags | blind_bitflags);
@@ -249,14 +216,10 @@ pub async fn run(ctx: Context, command: CommandInteraction) {
                         ),
                         true,
                     )
-                    .field(
-                        "Facade",
-                        empty_or(bitflags_to_adjectives(facade).join("\n")),
-                        true,
-                    )
+                    .field("Facade", empty_or(facade.as_adjectives().join("\n")), true)
                     .field(
                         "Unknown",
-                        empty_or(bitflags_to_adjectives(unknown).join("\n")),
+                        empty_or(unknown.as_adjectives().join("\n")),
                         true,
                     );
                 command
@@ -287,158 +250,4 @@ pub async fn run(ctx: Context, command: CommandInteraction) {
             panic!("Unreachable state (johari matching error)");
         }
     }
-}
-
-async fn get_johari(ctx: &Context, command: &CommandInteraction) -> Vec<String> {
-    let embed = |selected: &Vec<String>| {
-        CreateEmbed::new()
-            .title("The Johari window test")
-            .description("The Johari Window was invented by Joseph Luft and Harrington Ingham in the 1950s as a model for mapping personality awareness")
-            .field("Selected", if selected.is_empty() { "Nothing selected yet".into() } else { selected.join("\n") }, true)
-            .color((0xFF, 0x5C, 0x5C))
-            .footer(CreateEmbedFooter::new("This johari window is modified; see the original at https://kevan.org/johari"))
-    };
-
-    let mut selection: HashMap<String, bool> = ADJECTIVES
-        .iter()
-        .map(|adjective| (adjective.to_string(), false))
-        .collect();
-
-    let mut last_selected: Vec<String> = Vec::new();
-    let mut selected: Vec<String> = Vec::new();
-
-    let select_menu = |index, selected: &Vec<String>| {
-        let adjectives: Vec<_> = ADJECTIVES
-            .iter()
-            .skip(25 * index)
-            .take(25)
-            .map(|adjective| {
-                CreateSelectMenuOption::new(adjective.clone(), adjective.clone()).default_selection(
-                    selected
-                        .iter()
-                        .map(AsRef::<str>::as_ref)
-                        .contains(adjective),
-                )
-            })
-            .collect();
-        let n = adjectives.len() as u64;
-        CreateActionRow::SelectMenu(
-            CreateSelectMenu::new(
-                "select_menu",
-                CreateSelectMenuKind::String {
-                    options: adjectives,
-                },
-            )
-            .min_values(0)
-            .max_values(n),
-        )
-    };
-    let buttons = |selected: &Vec<String>| {
-        CreateActionRow::Buttons(vec![
-            CreateButton::new("Prev", "prev").style(ButtonStyle::Primary),
-            CreateButton::new("Next", "next").style(ButtonStyle::Primary),
-            CreateButton::new("Submit", "submit")
-                .style(ButtonStyle::Success)
-                .disabled(selected.len() < 5),
-        ])
-    };
-
-    let mut menu_index: usize = 0;
-
-    command
-        .create_response(
-            &ctx.http,
-            CreateInteractionResponse::Message(
-                CreateInteractionResponseMessage::default()
-                    .embed(embed(&selected))
-                    .components(vec![
-                        select_menu(menu_index, &selected).clone(),
-                        buttons(&selected),
-                    ]),
-            ),
-        )
-        .await
-        .unwrap();
-
-    let message = command.get_response(&ctx.http).await.unwrap();
-    let mut collector = ComponentInteractionCollectorBuilder::new(&ctx.shard)
-        .author_id(command.user.id)
-        .message_id(message.id)
-        .timeout(Duration::from_secs(600))
-        .build();
-
-    while let Some(interaction) = collector.next().await {
-        match interaction.data.custom_id.as_str() {
-            "select_menu" => {
-                if let ComponentInteractionDataKind::StringSelect { values } =
-                    interaction.data.kind.clone()
-                {
-                    for value in &values {
-                        *selection.get_mut(value.as_str()).unwrap() = true;
-                    }
-
-                    if !last_selected.is_empty() {
-                        for value in &last_selected {
-                            if !values.contains(value) {
-                                *selection.get_mut(value.as_str()).unwrap() = false;
-                            }
-                        }
-                    }
-
-                    last_selected = values.clone();
-                    selected = selection
-                        .iter()
-                        .filter(|(_, set)| **set)
-                        .map(|(k, _)| k.to_string())
-                        .collect();
-                }
-            }
-            button_selection @ ("next" | "prev") => {
-                if button_selection == "next" {
-                    menu_index = (menu_index + 1).min(ADJECTIVES.len() / 25);
-                } else {
-                    menu_index = menu_index.saturating_sub(1);
-                }
-                last_selected.clear();
-            }
-            "submit" => {
-                interaction
-                    .create_response(
-                        &ctx.http,
-                        CreateInteractionResponse::UpdateMessage(
-                            CreateInteractionResponseMessage::new()
-                                .embed(
-                                    CreateEmbed::new()
-                                        .title("Submission recorded")
-                                        .description("Your submission has been recorded"),
-                                )
-                                .components(Vec::new()),
-                        ),
-                    )
-                    .await
-                    .unwrap();
-
-                collector.stop();
-                break;
-            }
-
-            _ => {}
-        }
-        interaction
-            .create_response(
-                &ctx.http,
-                CreateInteractionResponse::UpdateMessage(
-                    CreateInteractionResponseMessage::default()
-                        .embed(embed(&selected))
-                        .components(vec![
-                            select_menu(menu_index, &selected).clone(),
-                            buttons(&selected),
-                        ]),
-                ),
-            )
-            .await
-            .unwrap();
-    }
-
-    selected
 }
