@@ -33,7 +33,7 @@ impl EventHandler for Handler {
 
 #[tokio::main]
 async fn main() {
-    let intents = GatewayIntents::empty();
+    let intents = GatewayIntents::empty() | GatewayIntents::GUILDS | GatewayIntents::GUILD_MEMBERS;
     let handler = Handler {};
     let mut client = Client::builder(dotenv!("DISCORD_TOKEN"), intents)
         .event_handler(handler)
