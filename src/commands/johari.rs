@@ -30,7 +30,7 @@ friendly, giving, happy, helpful, idealistic, independent, ingenious, intelligen
 introverted, kind, knowledgeable, logical, loving, mature, modest, nervous, observant,
 organised, patient, proud, quiet, reflective, relaxed, responsive,
  self_assertive, self_conscious, sensible, sentimental, shy, silly, spontaneous,
-sympathetic, tense, trustworthy, warm, witty }
+sympathetic, tense, trustworthy, warm, witty, wise }
 
 #[derive(Serialize, Deserialize)]
 pub struct Johari {
@@ -101,7 +101,6 @@ pub fn create() -> CreateCommand {
 }
 
 pub async fn run(ctx: Context, command: CommandInteraction) {
-    //println!("{:#?}", command.data);
     let mut johari_group = JohariGroup::load("johari.json").unwrap();
     let id = command.user.id;
 
@@ -168,33 +167,88 @@ pub async fn run(ctx: Context, command: CommandInteraction) {
                 return;
             };
             if let Some(johari) = johari_group.get(target_id) {
-                let mut arena = Adjectives::empty();
-                let mut blind = Adjectives::empty();
-                let mut facade = Adjectives::empty();
-                let mut unknown = Adjectives::all();
+                let guild_id = command.guild_id.unwrap();
+                let color = match guild_id
+                    .member(&ctx.http, target_id)
+                    .await
+                    .unwrap()
+                    .roles(&ctx.cache)
+                {
+                    Some(role) => role
+                        .last()
+                        .map(|role| role.colour)
+                        .unwrap_or((0, 0, 0).into()),
+                    None => (0, 0, 0).into(),
+                };
+
+                let mut arena: HashMap<&&str, usize> =
+                    ADJECTIVES.iter().map(|adjective| (adjective, 0)).collect();
+                let mut blind = arena.clone();
+                let mut facade = johari.adjectives;
+                let mut unknown = johari.adjectives.complement();
+
                 for other in &johari.others {
-                    arena |= johari.adjectives & other.adjectives;
-                    blind |= !johari.adjectives & other.adjectives;
-                    facade |= johari.adjectives & !other.adjectives;
-                    unknown &= !(arena | blind | facade);
+                    let arena_bitflags = johari.adjectives & other.adjectives;
+                    let blind_bitflags = !johari.adjectives & other.adjectives;
+
+                    for adjective in bitflags_to_adjectives(arena_bitflags) {
+                        *arena.get_mut(&adjective).unwrap() += 1;
+                    }
+                    for adjective in bitflags_to_adjectives(blind_bitflags) {
+                        *blind.get_mut(&adjective).unwrap() += 1;
+                    }
+                    facade &= !(arena_bitflags | blind_bitflags);
+                    unknown &= !other.adjectives;
                 }
 
-                let empty_or = |s: String| if s.is_empty() { "N/A".to_string() } else { s };
+                let empty_or = |s: String| {
+                    if s.is_empty() {
+                        "N/A".to_string()
+                    } else {
+                        format!("```fix\n{s}\n```")
+                    }
+                };
 
                 let embed = CreateEmbed::new()
                     .title("Johari window")
                     .description("The overall johari window")
+                    .color(color)
                     .field(
                         "Arena",
-                        empty_or(bitflags_to_adjectives(arena).join("\n")),
+                        empty_or(
+                            arena
+                                .iter()
+                                .filter_map(|(adj, n)| {
+                                    if *n > 1 {
+                                        Some(format!("{adj} ({n})"))
+                                    } else if *n == 1 {
+                                        Some(format!("{adj}"))
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .join("\n"),
+                        ),
                         true,
                     )
                     .field(
                         "Blind",
-                        empty_or(bitflags_to_adjectives(blind).join("\n")),
+                        empty_or(
+                            blind
+                                .iter()
+                                .filter_map(|(adj, n)| {
+                                    if *n > 1 {
+                                        Some(format!("{adj} ({n})"))
+                                    } else if *n == 1 {
+                                        Some(format!("{adj}"))
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .join("\n"),
+                        ),
                         true,
                     )
-                    .field("\u{200b}", "\u{200b}", false)
                     .field(
                         "Facade",
                         empty_or(bitflags_to_adjectives(facade).join("\n")),
@@ -254,28 +308,29 @@ async fn get_johari(ctx: &Context, command: &CommandInteraction) -> Vec<String> 
     let mut selected: Vec<String> = Vec::new();
 
     let select_menu = |index, selected: &Vec<String>| {
+        let adjectives: Vec<_> = ADJECTIVES
+            .iter()
+            .skip(25 * index)
+            .take(25)
+            .map(|adjective| {
+                CreateSelectMenuOption::new(adjective.clone(), adjective.clone()).default_selection(
+                    selected
+                        .iter()
+                        .map(AsRef::<str>::as_ref)
+                        .contains(adjective),
+                )
+            })
+            .collect();
+        let n = adjectives.len() as u64;
         CreateActionRow::SelectMenu(
             CreateSelectMenu::new(
                 "select_menu",
                 CreateSelectMenuKind::String {
-                    options: ADJECTIVES
-                        .iter()
-                        .skip(25 * index)
-                        .take(25)
-                        .map(|adjective| {
-                            CreateSelectMenuOption::new(adjective.clone(), adjective.clone())
-                                .default_selection(
-                                    selected
-                                        .iter()
-                                        .map(AsRef::<str>::as_ref)
-                                        .contains(adjective),
-                                )
-                        })
-                        .collect(),
+                    options: adjectives,
                 },
             )
             .min_values(0)
-            .max_values(25),
+            .max_values(n),
         )
     };
     let buttons = |selected: &Vec<String>| {
