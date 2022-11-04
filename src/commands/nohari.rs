@@ -12,7 +12,7 @@ use serenity::{
         CommandInteraction
     },
 };
-use soshari_macros::{adjectives};
+use soshari_macros::adjectives;
 
 use super::util::{respond_embed_error, menu_get};
 
@@ -81,7 +81,7 @@ pub async fn run(ctx: Context, command: CommandInteraction) {
                         .await;
                         return;
                     }
-                    if let Some(target) = nohari_group.get_mut(target_id.into()) {
+                    if let Some(target) = nohari_group.get_mut(target_id) {
                         Some(target)
                     } else {
                         respond_embed_error(
@@ -129,7 +129,7 @@ pub async fn run(ctx: Context, command: CommandInteraction) {
                 .await;
                 return;
             };
-            if let Some(nohari) = nohari_group.get(target_id.into()) {
+            if let Some(nohari) = nohari_group.get(target_id) {
                 let guild_id = command.guild_id.unwrap();
                 let color = match guild_id
                     .member(&ctx.http, target_id)

@@ -83,7 +83,7 @@ pub async fn run(ctx: Context, command: CommandInteraction) {
                         .await;
                         return;
                     }
-                    if let Some(target) = johari_group.get_mut(target_id.into()) {
+                    if let Some(target) = johari_group.get_mut(target_id) {
                         Some(target)
                     } else {
                         respond_embed_error(
@@ -131,7 +131,7 @@ pub async fn run(ctx: Context, command: CommandInteraction) {
                 .await;
                 return;
             };
-            if let Some(johari) = johari_group.get(target_id.into()) {
+            if let Some(johari) = johari_group.get(target_id) {
                 let guild_id = command.guild_id.unwrap();
                 let color = match guild_id
                     .member(&ctx.http, target_id)
@@ -155,10 +155,12 @@ pub async fn run(ctx: Context, command: CommandInteraction) {
                 let mut unknown = johari.adjectives.complement();
 
                 for other in &johari.others {
+                    println!("{:#?}", other.adjectives.as_adjectives());
                     let arena_bitflags = johari.adjectives & other.adjectives;
                     let blind_bitflags = !johari.adjectives & other.adjectives;
 
                     for adjective in arena_bitflags.as_adjectives() {
+                        println!("{adjective}");
                         *arena.get_mut(&adjective).unwrap() += 1;
                     }
                     for adjective in blind_bitflags.as_adjectives() {
@@ -186,6 +188,7 @@ pub async fn run(ctx: Context, command: CommandInteraction) {
                             arena
                                 .iter()
                                 .filter_map(|(adj, n)| {
+                                    //println!("{adj} {n}");
                                     if *n > 1 {
                                         Some(format!("{adj} ({n})"))
                                     } else if *n == 1 {

@@ -117,12 +117,12 @@ pub fn adjectives(attr: TokenStream, item: TokenStream) -> TokenStream {
                 Ok(())
             }
 
-            fn get(&self, id: u64) -> Option<&#ident> {
-                self.0.iter().find(|n| n.id == id)
+            fn get<U: Into<u64> + Copy>(&self, id: U) -> Option<&#ident> {
+                self.0.iter().find(|n| n.id == id.into())
             }
 
-            fn get_mut(&mut self, id: u64) -> Option<&mut #ident> {
-                self.0.iter_mut().find(|n| n.id == id)
+            fn get_mut<U: Into<u64> + Copy>(&mut self, id: U) -> Option<&mut #ident> {
+                self.0.iter_mut().find(|n| n.id == id.into())
             }
 
             fn push(&mut self, other: #ident) {
